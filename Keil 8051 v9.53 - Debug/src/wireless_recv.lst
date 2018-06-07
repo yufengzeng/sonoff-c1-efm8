@@ -1,0 +1,268 @@
+C51 COMPILER V9.53.0.0   WIRELESS_RECV                                                     06/07/2018 11:22:30 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE WIRELESS_RECV
+OBJECT MODULE PLACED IN .\src\wireless_recv.OBJ
+COMPILER INVOKED BY: c:\SiliconLabs\SimplicityStudio\v3\developer\toolchains\keil_8051\9.53\BIN\C51.exe D:\VM\share\EFM8
+                    -_PROJ\SONOFF-C1-EFM8\src\wireless_recv.c OMF2 SMALL DEBUG OBJECTEXTEND ROM(LARGE) WARNINGLEVEL(2) FLOATFUZZY(3) OPTIMIZE
+                    -(8,SPEED) DEFINE(DEBUG=1) INTVECTOR(0X0000) INTPROMOTE INCDIR(D:/VM/share/EFM8_PROJ/SONOFF-C1-EFM8/inc;C:/SiliconLabs/Si
+                    -mplicityStudio/v3/developer/sdks/si8051/v3//Device/shared/si8051Base;C:/SiliconLabs/SimplicityStudio/v3/developer/sdks/s
+                    -i8051/v3//Device/EFM8BB1;C:/SiliconLabs/SimplicityStudio/v3/developer/sdks/si8051/v3//Device/EFM8BB1/inc) PRINT(.\src\wi
+                    -reless_recv.lst) COND PAGEWIDTH(120) PAGELENGTH(65) OBJECT(.\src\wireless_recv.OBJ)
+
+line level    source
+
+   1          /*
+   2           * wireless_recv.c
+   3           *
+   4           *  Created on: 2017-4-24
+   5           *      Author: Administrator
+   6           */
+   7          
+   8          #include "wireless_recv.h"
+   9          #include "logic.h"
+  10          
+  11          
+  12          
+  13          SI_SBIT (RF_PIN, SFR_P0, 0);
+  14          
+  15          typedef struct
+  16          {
+  17                  uint8_t end_flag;
+  18                  uint8_t sync_flag;
+  19                  uint16_t sync_time;
+  20                  uint16_t rf_data[48];
+  21          }RecvData;
+  22          static RecvData idata recv_data = {0};
+  23          
+  24          
+  25          
+  26          /*start  action  Tsyn-h Tsyn-l  Tlow-h Tlow-l Thigh-h Thigh-l  data1 data2 data3  end*/
+  27          //static uint8_t xdata send_data[13] = {0x00};
+  28          
+  29          IrData idata ir_data = {0};
+  30          
+  31          
+  32          void saveCaptureValue(uint16_t capture_value)
+  33          {
+  34   1              static uint8_t cnt = 0;
+  35   1              if(!recv_data.sync_flag)
+  36   1              {
+  37   2                      if(capture_value >= 200 && RF_PIN == 1)
+  38   2                      {
+  39   3                              recv_data.sync_time = capture_value;
+  40   3                              recv_data.sync_flag = true;
+  41   3                      }
+  42   2              }
+  43   1              else
+  44   1              {
+  45   2                      if(recv_data.sync_time > (capture_value * 4))
+  46   2                      {
+  47   3                              recv_data.rf_data[cnt] = capture_value;
+  48   3                              cnt++;
+  49   3                      }
+  50   2                      else
+  51   2                      {
+C51 COMPILER V9.53.0.0   WIRELESS_RECV                                                     06/07/2018 11:22:30 PAGE 2   
+
+  52   3                              recv_data.sync_flag = false;
+  53   3                              cnt = 0;
+  54   3                      }
+  55   2                      if(cnt >= 48)
+  56   2                      {
+  57   3                              cnt = 0;
+  58   3                              recv_data.end_flag = true;
+  59   3                              recv_data.sync_flag = false;
+  60   3                      }
+  61   2              }
+  62   1      }
+  63          
+  64          
+  65          
+  66          typedef enum 
+  67          {
+  68              STATUS_NO_CLICK             = 0,
+  69              STATUS_FIRST_CLICK          = 1,
+  70              STATUS_PERSIS_CLICK         = 2,    
+  71              STATUS_ERROR                = 0xff,
+  72          } rfState;
+  73          
+  74          
+  75          
+  76          
+  77          void analyzeRfData(void)
+  78          {
+  79   1              uint8_t i = 0;
+  80   1              uint32_t temp = 0;
+  81   1              uint16_t unit_time = 0;
+  82   1              uint16_t temp_time = 0;
+  83   1              uint16_t threshold_time = 0;
+  84   1              uint16_t sync_threshold = 0;
+  85   1              uint16_t short_time = 0;
+  86   1              uint16_t long_time = 0;
+  87   1          static uint8_t rf_state = STATUS_NO_CLICK;
+  88   1         
+  89   1          static uint16_t same_rfvalue_period = 0; 
+  90   1          static uint32_t last_period   = 0;  
+  91   1          
+  92   1          if(recv_data.end_flag == true)
+  93   1              {
+  94   2                  recv_data.end_flag = false;
+  95   2                      if(ir_data.cnt == 0)
+  96   2                      {
+  97   3                              ir_data.high_time = recv_data.rf_data[0];
+  98   3                              ir_data.low_time = recv_data.rf_data[1];
+  99   3                              ir_data.sync_time = recv_data.sync_time;
+ 100   3                      }
+ 101   2                      unit_time = ir_data.high_time + ir_data.low_time;
+ 102   2                      threshold_time = unit_time / 4;   //5 
+ 103   2                      sync_threshold = ir_data.sync_time / 4;   //5
+ 104   2                      for(i = 0; i < 48; i = i + 2)
+ 105   2                      {
+ 106   3                              temp_time = recv_data.rf_data[i] + recv_data.rf_data[i + 1];
+ 107   3                              if((temp_time > unit_time + threshold_time)
+ 108   3                                      || (temp_time < unit_time - threshold_time))
+ 109   3                              {
+ 110   4                                      if(++ir_data.timer_cnt>0xff00)
+ 111   4                      {
+ 112   5                          ir_data.timer_cnt = 0xff03;
+ 113   5                      }
+ 114   4                                      return;
+C51 COMPILER V9.53.0.0   WIRELESS_RECV                                                     06/07/2018 11:22:30 PAGE 3   
+
+ 115   4                              }
+ 116   3                              if(recv_data.rf_data[i] > recv_data.rf_data[i + 1])
+ 117   3                              {
+ 118   4                                      temp = (temp << 1) | 0x01;
+ 119   4                                      short_time += recv_data.rf_data[i + 1];
+ 120   4                                      long_time += recv_data.rf_data[i];
+ 121   4                              }
+ 122   3                              else if(recv_data.rf_data[i] < recv_data.rf_data[i + 1])
+ 123   3                              {
+ 124   4                                      temp = temp << 1;
+ 125   4                                      long_time += recv_data.rf_data[i + 1];
+ 126   4                                      short_time += recv_data.rf_data[i];
+ 127   4                              }
+ 128   3                              else
+ 129   3                              {
+ 130   4                                      if(++ir_data.timer_cnt>0xff00)
+ 131   4                      {
+ 132   5                          ir_data.timer_cnt = 0xff03;
+ 133   5                      }
+ 134   4                                      return;
+ 135   4                              }
+ 136   3                      }
+ 137   2      
+ 138   2      
+ 139   2      
+ 140   2                      if(rf_state == STATUS_NO_CLICK)
+ 141   2                      {
+ 142   3                          ir_data.click_flag =true;
+ 143   3                  ir_data.psis_click_flag =false;
+ 144   3                  ir_data.sync_time = recv_data.sync_time;
+ 145   3                  ir_data.ir_data = temp;
+ 146   3                  ir_data.cnt = 1;
+ 147   3                  ir_data.timer_cnt = 0;
+ 148   3                  ir_data.low_time = (uint16_t)((short_time / 24) + 0.5);
+ 149   3                  ir_data.high_time = (uint16_t)((long_time / 24) + 0.5);
+ 150   3                  rf_state = STATUS_FIRST_CLICK;
+ 151   3                      }
+ 152   2              else if(rf_state == STATUS_FIRST_CLICK)
+ 153   2                      {
+ 154   3                          if(same_rfvalue_period*2 < 2*last_period/100)
+ 155   3                  {   
+ 156   4                      if((ir_data.sync_time < threshold_time + recv_data.sync_time                    
+ 157   4                          && ir_data.sync_time > recv_data.sync_time - threshold_time         
+ 158   4                          && temp == ir_data.ir_data))
+ 159   4                          {
+ 160   5                              ir_data.cnt++;
+ 161   5                              rf_state = STATUS_PERSIS_CLICK;
+ 162   5                          }
+ 163   4                      else
+ 164   4                                      {
+ 165   5                                              ir_data.sync_time = recv_data.sync_time;
+ 166   5                                              ir_data.ir_data = temp;
+ 167   5                                              ir_data.cnt = 1;
+ 168   5                                              ir_data.timer_cnt = 0;
+ 169   5                                              ir_data.low_time = (uint16_t)((short_time / 24) + 0.5);
+ 170   5                                              ir_data.high_time = (uint16_t)((long_time / 24) + 0.5);
+ 171   5                                      }
+ 172   4      
+ 173   4      
+ 174   4                  }      
+ 175   3                      }
+ 176   2                      else if(rf_state == STATUS_PERSIS_CLICK)
+ 177   2                      {
+C51 COMPILER V9.53.0.0   WIRELESS_RECV                                                     06/07/2018 11:22:30 PAGE 4   
+
+ 178   3                          ir_data.click_flag =false;
+ 179   3                  ir_data.psis_click_flag =false;
+ 180   3                          if(same_rfvalue_period*2 < 2*last_period/100)
+ 181   3                  {   
+ 182   4                      if((ir_data.sync_time < threshold_time + recv_data.sync_time                    
+ 183   4                          && ir_data.sync_time > recv_data.sync_time - threshold_time         
+ 184   4                          && temp == ir_data.ir_data))
+ 185   4                          {
+ 186   5                              if(++ir_data.cnt>=10)
+ 187   5                              {
+ 188   6                                  if(ir_data.cnt==10)
+ 189   6                                  {
+ 190   7                                      ir_data.psis_click_flag =true;
+ 191   7                                  }
+ 192   6                                  else
+ 193   6                                  {
+ 194   7                                      ir_data.cnt = 15;
+ 195   7                                  }
+ 196   6                              }
+ 197   5                          }
+ 198   4                  }
+ 199   3                  ir_data.sync_time = recv_data.sync_time;
+ 200   3                  ir_data.ir_data = temp;
+ 201   3                  //ir_data.cnt = 1;
+ 202   3                  ir_data.timer_cnt = 0;
+ 203   3                  ir_data.low_time = (uint16_t)((short_time / 24) + 0.5);
+ 204   3                  ir_data.high_time = (uint16_t)((long_time / 24) + 0.5);
+ 205   3      
+ 206   3                      }
+ 207   2              same_rfvalue_period = 0;
+ 208   2              last_period = (short_time + long_time)<<2;
+ 209   2              }
+ 210   1              else
+ 211   1              {
+ 212   2              if(++same_rfvalue_period > 150)    
+ 213   2              {       
+ 214   3                  same_rfvalue_period = 152; 
+ 215   3                  rf_state = STATUS_NO_CLICK;
+ 216   3                  ir_data.cnt = 0;
+ 217   3                  ir_data.ir_data = 0;
+ 218   3                  ir_data.sync_time = 0;
+ 219   3              }
+ 220   2              if(++ir_data.timer_cnt>0xff00)
+ 221   2              {
+ 222   3                  ir_data.timer_cnt = 0xff03;
+ 223   3              }
+ 224   2              }
+ 225   1          
+ 226   1      }
+ 227          
+ 228          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1194    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      8      14
+   IDATA SIZE       =    115    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+C51 COMPILER V9.53.0.0   WIRELESS_RECV                                                     06/07/2018 11:22:30 PAGE 5   
+
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
