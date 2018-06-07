@@ -11,6 +11,15 @@
 #include "stdint.h"
 #include <SI_EFM8BB1_Register_Enums.h>
 
+
+typedef enum 
+{
+    STATUS_NO_CLICK             = 0,
+    STATUS_FIRST_CLICK          = 1,
+    STATUS_PERSIS_CLICK         = 2,    
+    STATUS_ERROR                = 0xff,
+} rfState;
+
 typedef struct
 {
 	uint16_t sync_time;

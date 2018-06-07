@@ -12,7 +12,7 @@
 #include "wireless_led.h"
 #include "EFM8BB1_FlashPrimitives.h"
 #include "EFM8BB1_FlashUtils.h"
-
+#include "userclock.h"
 
 #define STORE_NUM_MAX   14
 #define SINGLE_LEN  5
@@ -29,6 +29,7 @@ DevMode dev_mode = DEV_NORMAL;
 
 uint16_t timerout_cnt = 0;
 
+volatile uint8_t clkIntCnt = 0;
 
 uint8_t  gSelectChl = 0;
 
@@ -164,30 +165,32 @@ static void delNormalEvent(void)
 		ir_data.timer_cnt = 0;
         value = checkRemoteValue(ir_data);
 
-
         if((value&(0x01)) ==(0x01))
         {
         	buzzerTimes(1);
             chl0_act_period = 15;
         }
 	}
-
-
 }
 
 static void delStudyEvent(void)
 {
-    if(ir_data.click_flag)
+    if(FClk_50MS)
+    {
+        timerout_cnt++;
+    }
+    
+    if(ir_data.psis_click_flag)
     {
     	ir_data.click_flag = false;
 	    buzzerTimes(1);
 		ir_data.timer_cnt = 0;
         saveToRemoteLib(gSelectChl,ir_data);
-		dev_mode = DEV_NORMAL;
+		setDevMode(DEV_NORMAL);
 	}
-	else if(timerout_cnt >= 500)
+	else if(timerout_cnt >= 100) //5000ms
 	{
-		dev_mode = DEV_NORMAL;
+		setDevMode(DEV_NORMAL);
 	}
 
 }
@@ -195,6 +198,12 @@ static void delStudyEvent(void)
 static void delClearEvent(void)
 {
     uint8_t cnt;
+
+    if(FClk_50MS)
+    {
+        timerout_cnt++;
+    }
+    
 	if(ir_data.click_flag)
 	{
 	    ir_data.click_flag = false;
@@ -205,15 +214,15 @@ static void delClearEvent(void)
         {
             remote_value_lib[gSelectChl][cnt] = 0;
         }
-		dev_mode = DEV_NORMAL;
+		setDevMode(DEV_NORMAL);
         FLASH_PageErase(START_ADDRESS);  
         FLASH_Write(START_ADDRESS, &remote_value_lib[0][0], sizeof(remote_value_lib));
         buzzerTimes(1);
  
 	}
-	else if(timerout_cnt >= 500) 
+	else if(timerout_cnt >= 100) 
 	{
-		dev_mode = DEV_NORMAL;
+		setDevMode(DEV_NORMAL);
 	}
 }
 
@@ -244,6 +253,10 @@ static void delTestEvent(void)
 }
 
 
+void delEspKey(void)
+{
+    ;
+}
 
 void delEvent(void)
 {

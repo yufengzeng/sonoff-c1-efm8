@@ -1,4 +1,4 @@
-C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 11:22:26 PAGE 1   
+C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 17:00:51 PAGE 1   
 
 
 C51 COMPILER V9.53.0.0, COMPILATION OF MODULE INTERRUPTS
@@ -63,7 +63,7 @@ line level    source
   49   2         }
   50   1      }
   51          
-C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 11:22:26 PAGE 2   
+C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 17:00:51 PAGE 2   
 
   52          //-----------------------------------------------------------------------------
   53          // TIMER2_ISR
@@ -91,10 +91,10 @@ line level    source
   75          //-----------------------------------------------------------------------------
   76          SI_INTERRUPT (TIMER3_ISR, TIMER3_IRQn)
   77          {
-  78   1              buzzerScan();
-  79   1              Key_Action();
-  80   1              timerout_cnt++;
-  81   1          
+  78   1          Key_Action();
+  79   1          
+  80   1              //timerout_cnt++;
+  81   1          clkIntCnt ++;
   82   1         
   83   1              TMR3CN0 &= 0x7f;
   84   1      }
@@ -128,14 +128,14 @@ line level    source
  112          SI_INTERRUPT (TIMER1_ISR, TIMER1_IRQn)
  113          {
  114   1      
-C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 11:22:26 PAGE 3   
+C51 COMPILER V9.53.0.0   INTERRUPTS                                                        06/07/2018 17:00:51 PAGE 3   
 
  115   1      }
  116          
 
 
 MODULE INFORMATION:   STATIC OVERLAYABLE
-   CODE SIZE        =    248    ----
+   CODE SIZE        =    239    ----
    CONSTANT SIZE    =   ----    ----
    XDATA SIZE       =   ----    ----
    PDATA SIZE       =   ----    ----

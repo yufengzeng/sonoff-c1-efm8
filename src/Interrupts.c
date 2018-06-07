@@ -75,10 +75,10 @@ SI_INTERRUPT (TIMER2_ISR, TIMER2_IRQn)
 //-----------------------------------------------------------------------------
 SI_INTERRUPT (TIMER3_ISR, TIMER3_IRQn)
 {
-	buzzerScan();
-	Key_Action();
-	timerout_cnt++;
+    Key_Action();
     
+	//timerout_cnt++;
+    clkIntCnt ++;
    
 	TMR3CN0 &= 0x7f;
 }

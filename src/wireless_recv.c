@@ -8,7 +8,7 @@
 #include "wireless_recv.h"
 #include "logic.h"
 
-
+uint8_t rf_state = STATUS_NO_CLICK;
 
 SI_SBIT (RF_PIN, SFR_P0, 0);
 
@@ -63,15 +63,6 @@ void saveCaptureValue(uint16_t capture_value)
 
 
 
-typedef enum 
-{
-    STATUS_NO_CLICK             = 0,
-    STATUS_FIRST_CLICK          = 1,
-    STATUS_PERSIS_CLICK         = 2,    
-    STATUS_ERROR                = 0xff,
-} rfState;
-
-
 
 
 void analyzeRfData(void)
@@ -84,7 +75,6 @@ void analyzeRfData(void)
 	uint16_t sync_threshold = 0;
 	uint16_t short_time = 0;
 	uint16_t long_time = 0;
-    static uint8_t rf_state = STATUS_NO_CLICK;
    
     static uint16_t same_rfvalue_period = 0; 
     static uint32_t last_period   = 0;  
@@ -169,8 +159,6 @@ void analyzeRfData(void)
 					ir_data.low_time = (uint16_t)((short_time / 24) + 0.5);
 					ir_data.high_time = (uint16_t)((long_time / 24) + 0.5);
 				}
-
-
             }      
 		}
 		else if(rf_state == STATUS_PERSIS_CLICK)
@@ -182,19 +170,19 @@ void analyzeRfData(void)
                 if((ir_data.sync_time < threshold_time + recv_data.sync_time			
                     && ir_data.sync_time > recv_data.sync_time - threshold_time         
                     && temp == ir_data.ir_data))
+                {
+                    if(++ir_data.cnt>=10)
                     {
-                        if(++ir_data.cnt>=10)
+                        if(ir_data.cnt==10)
                         {
-                            if(ir_data.cnt==10)
-                            {
-                                ir_data.psis_click_flag =true;
-                            }
-                            else
-                            {
-                                ir_data.cnt = 15;
-                            }
+                            ir_data.psis_click_flag =true;
+                        }
+                        else
+                        {
+                            ir_data.cnt = 15;
                         }
                     }
+                }
             }
             ir_data.sync_time = recv_data.sync_time;
             ir_data.ir_data = temp;

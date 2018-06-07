@@ -1,0 +1,317 @@
+C51 COMPILER V9.53.0.0   LOGIC                                                             06/07/2018 16:19:11 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE LOGIC
+OBJECT MODULE PLACED IN .\src\logic.OBJ
+COMPILER INVOKED BY: c:\SiliconLabs\SimplicityStudio\v3\developer\toolchains\keil_8051\9.53\BIN\C51.exe D:\VM\share\EFM8
+                    -_PROJ\SONOFF-C1-EFM8\src\logic.c OMF2 SMALL DEBUG OBJECTEXTEND ROM(LARGE) WARNINGLEVEL(2) FLOATFUZZY(3) OPTIMIZE(9,SPEED
+                    -) DEFINE(NDEBUG=1) INTVECTOR(0X0000) INTPROMOTE INCDIR(D:/VM/share/EFM8_PROJ/SONOFF-C1-EFM8/inc;C:/SiliconLabs/Simplicit
+                    -yStudio/v3/developer/sdks/si8051/v3//Device/shared/si8051Base;C:/SiliconLabs/SimplicityStudio/v3/developer/sdks/si8051/v
+                    -3//Device/EFM8BB1;C:/SiliconLabs/SimplicityStudio/v3/developer/sdks/si8051/v3//Device/EFM8BB1/inc) REGFILE(Sonoff-C1-EFM
+                    -8.ORC) PRINT(.\src\logic.lst) COND PAGEWIDTH(120) PAGELENGTH(65) OBJECT(.\src\logic.OBJ)
+
+line level    source
+
+   1          /*
+   2           * logic.c
+   3           *
+   4           *  Created on: 2017-5-2
+   5           *      Author: Administrator
+   6           */
+   7          
+   8          
+   9          #include "logic.h"
+  10          #include "key.h"
+  11          #include "wireless_recv.h"
+  12          #include "wireless_led.h"
+  13          #include "EFM8BB1_FlashPrimitives.h"
+  14          #include "EFM8BB1_FlashUtils.h"
+  15          #include "userclock.h"
+  16          
+  17          #define STORE_NUM_MAX   14
+  18          #define SINGLE_LEN  5
+  19          
+  20          
+  21          
+  22          #define START_ADDRESS          (0x1600+0x400)
+  23          
+  24          
+  25          SI_LOCATED_VARIABLE_NO_INIT(flash_write_array[512], uint8_t, SI_SEG_CODE, START_ADDRESS);
+  26          
+  27          
+  28          DevMode dev_mode = DEV_NORMAL;
+  29          
+  30          uint16_t timerout_cnt = 0;
+  31          
+  32          volatile uint8_t clkIntCnt = 0;
+  33          
+  34          uint8_t  gSelectChl = 0;
+  35          
+  36          uint8_t chl0_act_period = 0;
+  37          
+  38          uint8_t xdata remote_value_lib[3][71]={0};
+  39          
+  40          
+  41          static void loadRemoteLib(void)
+  42          {
+  43   1          FLASH_Read(&remote_value_lib[0][0], START_ADDRESS, sizeof(remote_value_lib));
+  44   1          if(remote_value_lib[0][0] >=3*STORE_NUM_MAX)
+  45   1          {
+  46   2              remote_value_lib[0][0] = 0;
+  47   2          }
+  48   1          if(remote_value_lib[1][0] >=3*STORE_NUM_MAX)
+  49   1          {
+  50   2              remote_value_lib[1][0] = 0;
+  51   2          }
+C51 COMPILER V9.53.0.0   LOGIC                                                             06/07/2018 16:19:11 PAGE 2   
+
+  52   1          if(remote_value_lib[2][0] >=3*STORE_NUM_MAX)
+  53   1          {
+  54   2              remote_value_lib[2][0] = 0;
+  55   2          }
+  56   1          
+  57   1          FLASH_PageErase(START_ADDRESS);  
+  58   1          FLASH_Write(START_ADDRESS, &remote_value_lib[0][0], sizeof(remote_value_lib));
+  59   1      }
+  60          
+  61          static uint8_t checkRemoteValue(IrData irFrm)
+  62          {   
+  63   1          uint8_t hg,le,rtu;
+  64   1          uint8_t dataH = (irFrm.ir_data>>16)&0x000000ff;
+  65   1          uint8_t dataM = (irFrm.ir_data>>8)&0x000000ff;
+  66   1          uint8_t dataL = irFrm.ir_data&0x000000ff;
+  67   1          uint16_t high_time;
+  68   1      
+  69   1          rtu = 0;
+  70   1          for(hg =0; hg<3;hg++)
+  71   1          {
+  72   2              for(le =0; le<14;le++)
+  73   2              {
+  74   3                  if(le >= remote_value_lib[hg][0])
+  75   3                  {break;}
+  76   3                  if((remote_value_lib[hg][5*le+3] ==dataH)
+  77   3                  &&(remote_value_lib[hg][5*le+4] ==dataM)
+  78   3                  &&(remote_value_lib[hg][5*le+5] ==dataL)
+  79   3                  )
+  80   3                  {
+  81   4                     high_time = (remote_value_lib[hg][5*le+1]<<8)+ remote_value_lib[hg][5*le+2];
+  82   4                     if(irFrm.high_time < (high_time + high_time/5)
+  83   4                       &&irFrm.high_time > (high_time - high_time/5)
+  84   4                       )
+  85   4                       {
+  86   5                          rtu |=(1<<hg);
+  87   5                          break;
+  88   5                       }
+  89   4                  }
+  90   3              } 
+  91   2          }
+  92   1          return rtu;
+  93   1      }
+  94          
+  95          
+  96          static void saveToRemoteLib(uint8_t chl,IrData irFrm)
+  97          {
+  98   1          uint8_t value;
+  99   1          if(chl>2) return;
+ 100   1          value = checkRemoteValue(irFrm);
+ 101   1          if((value&(1<<chl)) ==(1<<chl))
+ 102   1          {
+ 103   2              chl = chl;
+ 104   2          }
+ 105   1          else
+ 106   1          {
+ 107   2              value = remote_value_lib[chl][0];
+ 108   2              if(value >= 28)     /* 2*STORE_NUM_MAX*/
+ 109   2              {
+ 110   3                  value -= STORE_NUM_MAX;
+ 111   3              }
+ 112   2              remote_value_lib[chl][0] = value +1;
+ 113   2              value = value%STORE_NUM_MAX;
+ 114   2              remote_value_lib[chl][1+value*5] = (irFrm.high_time >>8);
+C51 COMPILER V9.53.0.0   LOGIC                                                             06/07/2018 16:19:11 PAGE 3   
+
+ 115   2              remote_value_lib[chl][2+value*5] = (irFrm.high_time &0xFF);
+ 116   2              remote_value_lib[chl][3+value*5] = ((irFrm.ir_data >>16)&0xFF);
+ 117   2              remote_value_lib[chl][4+value*5] = ((irFrm.ir_data >>8)&0xFF);
+ 118   2              remote_value_lib[chl][5+value*5] = ((irFrm.ir_data )&0xFF);        
+ 119   2              FLASH_PageErase(START_ADDRESS);  
+ 120   2              FLASH_Write(START_ADDRESS, &remote_value_lib[0][0], sizeof(remote_value_lib));
+ 121   2          }
+ 122   1         
+ 123   1      }
+ 124          
+ 125          
+ 126          
+ 127          #if 1
+ 128          void delay_us(unsigned int k)
+ 129          {
+ 130   1          while(k--)
+ 131   1          {
+ 132   2              _nop_();_nop_();_nop_();_nop_();
+ 133   2              _nop_();_nop_();_nop_();_nop_();
+ 134   2              _nop_();
+ 135   2          }
+ 136   1      }
+ 137          void delay_1ms()
+ 138          {
+ 139   1          unsigned int j ;
+ 140   1          for(j=2450;j>0;j--);
+ 141   1      }
+ 142          
+ 143          void delay_ms(unsigned int i)
+ 144          {
+ 145   1          for(;i>0;i--)delay_1ms();
+ 146   1      }
+ 147          #endif
+ 148          
+ 149          
+ 150          
+ 151          void setDevMode(DevMode mode)
+ 152          {
+ 153   1          dev_mode = mode;
+ 154   1          timerout_cnt = 0;
+ 155   1      }
+ 156          
+ 157          
+ 158          
+ 159          static void delNormalEvent(void)
+ 160          {
+ 161   1          uint8_t value  = 0;
+ 162   1          if(ir_data.click_flag)
+ 163   1              {
+ 164   2                  ir_data.click_flag = false;
+ 165   2                      ir_data.timer_cnt = 0;
+ 166   2              value = checkRemoteValue(ir_data);
+ 167   2      
+ 168   2              if((value&(0x01)) ==(0x01))
+ 169   2              {
+ 170   3                      buzzerTimes(1);
+ 171   3                  chl0_act_period = 15;
+ 172   3              }
+ 173   2              }
+ 174   1      }
+ 175          
+ 176          static void delStudyEvent(void)
+ 177          {
+C51 COMPILER V9.53.0.0   LOGIC                                                             06/07/2018 16:19:11 PAGE 4   
+
+ 178   1          if(ir_data.psis_click_flag)
+ 179   1          {
+ 180   2              ir_data.click_flag = false;
+ 181   2                  buzzerTimes(1);
+ 182   2                      ir_data.timer_cnt = 0;
+ 183   2              saveToRemoteLib(gSelectChl,ir_data);
+ 184   2                      setDevMode(DEV_NORMAL);
+ 185   2              }
+ 186   1              else if(timerout_cnt >= 1000) //500
+ 187   1              {
+ 188   2                      setDevMode(DEV_NORMAL);
+ 189   2              }
+ 190   1      
+ 191   1      }
+ 192          
+ 193          static void delClearEvent(void)
+ 194          {
+ 195   1          uint8_t cnt;
+ 196   1              if(ir_data.click_flag)
+ 197   1              {
+ 198   2                  ir_data.click_flag = false;
+ 199   2                      ir_data.timer_cnt = 0;
+ 200   2              remote_value_lib[gSelectChl][0] = 0;
+ 201   2      
+ 202   2              for(cnt = 0; cnt<71;cnt++)
+ 203   2              {
+ 204   3                  remote_value_lib[gSelectChl][cnt] = 0;
+ 205   3              }
+ 206   2                      setDevMode(DEV_NORMAL);
+ 207   2              FLASH_PageErase(START_ADDRESS);  
+ 208   2              FLASH_Write(START_ADDRESS, &remote_value_lib[0][0], sizeof(remote_value_lib));
+ 209   2              buzzerTimes(1);
+ 210   2       
+ 211   2              }
+ 212   1              else if(timerout_cnt >= 500) 
+ 213   1              {
+ 214   2                      setDevMode(DEV_NORMAL);
+ 215   2              }
+ 216   1      }
+ 217          
+ 218          
+ 219          
+ 220          
+ 221          static void delTestEvent(void)
+ 222          {
+ 223   1          uint8_t i,j;
+ 224   1          for(i = 0;i<3 ;i++)
+ 225   1          {
+ 226   2              for(j = 0;j<71 ;j++)
+ 227   2              {
+ 228   3                  remote_value_lib[i][j] =i+j;
+ 229   3              }
+ 230   2          }   
+ 231   1          FLASH_PageErase(START_ADDRESS);
+ 232   1          FLASH_Write(START_ADDRESS, &remote_value_lib[0][0], sizeof(remote_value_lib));
+ 233   1      
+ 234   1          for(i = 0;i<3 ;i++)
+ 235   1          {
+ 236   2              for(j = 0;j<71 ;j++)
+ 237   2              {
+ 238   3                  remote_value_lib[i][j] =3;
+ 239   3              }
+ 240   2          }
+C51 COMPILER V9.53.0.0   LOGIC                                                             06/07/2018 16:19:11 PAGE 5   
+
+ 241   1          FLASH_Read(&remote_value_lib[0][0], START_ADDRESS, sizeof(remote_value_lib));
+ 242   1      }
+ 243          
+ 244          
+ 245          void delEspKey(void)
+ 246          {
+ 247   1          
+ 248   1      }
+ 249          
+ 250          void delEvent(void)
+ 251          {
+ 252   1              switch(dev_mode)
+ 253   1              {
+ 254   2              case DEV_NORMAL:
+ 255   2                      delNormalEvent();
+ 256   2                      break;
+ 257   2              case DEV_STUDY:
+ 258   2                      delStudyEvent();
+ 259   2                      break;
+ 260   2              case DEV_CLEAR:
+ 261   2                      delClearEvent();
+ 262   2                      break;
+ 263   2              case DEV_TEST:
+ 264   2                  delTestEvent();
+ 265   2                  break;
+ 266   2              default:
+ 267   2                      break;
+ 268   2              }
+ 269   1      }
+ 270          
+ 271          
+ 272          void devInit(void)
+ 273          {
+ 274   1              BUZZER = 0;
+ 275   1              IO_WIFI_KEY0 = 1;
+ 276   1              loadRemoteLib();
+ 277   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    948    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =    213    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      6      39
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+   EDATA SIZE       =   ----    ----
+   HDATA SIZE       =   ----    ----
+   XDATA CONST SIZE =   ----    ----
+   FAR CONST SIZE   =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

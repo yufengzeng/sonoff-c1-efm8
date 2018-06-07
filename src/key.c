@@ -2,14 +2,11 @@
 #include "key.h"
 #include "logic.h"
 #include "wireless_led.h"
-
+#include "userclock.h"
 
 
 uint16_t sKeyCnt;
 uint8_t gValue;
-
-
-SI_SBIT (IO_KEY_CH0, SFR_P0, 7);
 
 uint8_t GetKey(void)
 {
@@ -90,6 +87,7 @@ uint8_t GetKey(void)
 void Key_Action(void)
 {
 	uint8_t gTemp;
+    
 	gTemp = GetKey();
 	if(gTemp == N_KEY) {;}		
 	else if(gTemp == S_KEY_CH0)  

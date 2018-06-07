@@ -22,6 +22,8 @@ typedef enum
 void devInit(void);
 void delEvent(void);
 void setDevMode(DevMode);
+void delEspKey(void);
+
 
 
 
@@ -37,7 +39,7 @@ extern uint8_t  gSelectChl;
 
 
 extern uint8_t chl0_act_period;
-
+extern volatile uint8_t clkIntCnt;
 
 
 #endif /* LOGIC_H_ */

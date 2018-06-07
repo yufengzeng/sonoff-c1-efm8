@@ -107,6 +107,8 @@
 #include "logic.h"
 #include "wireless_led.h"
 #include "wdt_0.h"
+#include "userclock.h"
+
 //-----------------------------------------------------------------------------
 // Main Routine
 //-----------------------------------------------------------------------------
@@ -117,6 +119,7 @@
 
 void main (void)
 {
+   uint8_t bflag = 1;
    enter_DefaultMode_from_RESET();
    devInit();
    IE_EA = 1;
@@ -124,13 +127,15 @@ void main (void)
    WDT0_init(WDT0_ticksToInterval(WDT_TICKS), WDT0_LFOSC, WDT0_IDLE_SUSPEND);
 
    WDT0_start();
-
-
+ 
 
    while (1)
    {
 	   WDT0_feed();
+       getClock();
 	   delEvent();
+       delEspKey();  
+       buzzerScan();
    }
 }
 
